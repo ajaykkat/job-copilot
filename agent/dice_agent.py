@@ -21,6 +21,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from agent import browser as B
 from tailor import check_relevance, tailor_resume, analyze_skills_gap
 from tracker import add_application, is_already_applied
+from sponsorship import sponsor_gate, compact as sponsor_compact
 from agent.docx_generator import generate_docx
 from agent.portal_agent import PortalAgent
 from user_profile import get_immigration_answers, requires_clearance, requires_citizenship
@@ -554,6 +555,17 @@ class DiceAgent:
                             if self.bridge: self.bridge.inc_skipped()
                             continue
 
+                        # Sponsorship: H-1B history + JD language
+                        spons, spons_skip = sponsor_gate(company, title, jd, self.profile)
+                        job_ref["sponsorship"] = spons
+                        if spons_skip:
+                            self._log(f"Sponsorship — {spons_skip} — skipping", "skip", job_ref)
+                            self.skipped += 1
+                            if self.bridge: self.bridge.inc_skipped()
+                            continue
+                        if spons["verdict"] != "not_needed":
+                            self._log(f"Sponsorship: {spons['label']} — {'; '.join(spons['reasons'][:2])}", job=job_ref)
+
                         # Relevance check
                         rel = check_relevance(self.client, jd)
                         self._log(
@@ -574,6 +586,7 @@ class DiceAgent:
                             "company":  company,
                             "jd":       jd[:3000],
                             "score":    rel.get("score", 0),
+                            "sponsorship": spons,
                         }
                         self._current_tailored = tailored
 
@@ -584,7 +597,7 @@ class DiceAgent:
                         # Apply
                         if self._apply_to_job(url, title, company, jd, tailored):
                             self.applied += 1
-                            add_application(company, title, "Dice")
+                            add_application(company, title, "Dice", sponsorship=sponsor_compact(spons))
                             self._log(
                                 f"Applied ({self.applied}/{max_applications})",
                                 "success", self._current_job

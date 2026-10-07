@@ -13,6 +13,7 @@
   --red:    #f85149;
   --yellow: #d29922;
   --blue:   #58a6ff;
+  --orange: #f0883e;
   --r:      6px;
   --mono: 'JetBrains Mono','Fira Code','Cascadia Code','Consolas',monospace;
   --sans: -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
@@ -387,7 +388,7 @@ html, body {
 }
 .settings-panel {
   position: absolute; right: 0; top: 0; bottom: 0;
-  width: 360px;
+  width: 400px; max-width: 100vw;
   background: var(--s1);
   border-left: 1px solid var(--bd);
   display: flex; flex-direction: column;
@@ -476,11 +477,14 @@ html, body {
   font-family: var(--sans); outline: none;
   transition: border-color .15s;
 }
-.s-field input:focus { border-color: var(--accent); }
+.s-field input:focus, .s-field select:focus { border-color: var(--accent); }
 
 .settings-ft {
+  display: flex; align-items: center; justify-content: flex-end; gap: 12px;
   padding: 14px 20px; border-top: 1px solid var(--bd); flex-shrink: 0;
 }
+.settings-msg { flex: 1; font-size: 11.5px; color: var(--dim); }
+.settings-msg.error { color: var(--red); }
 
 /* ── Buttons ─────────────────────────────────────────────────── */
 .btn-run {
@@ -699,7 +703,7 @@ html, body {
 .ats-badge.ats-ok   { background: #3a3000; color: #ffc107; }
 .ats-badge.ats-low  { background: #3a1010; color: #f44336; }
 .pane-tabs { display: flex; gap: 4px; }
-.pane-tab  { background: none; border: 1px solid var(--border); color: var(--dim); border-radius: 4px; padding: 2px 10px; font-size: 11px; cursor: pointer; }
+.pane-tab  { background: none; border: 1px solid var(--bd); color: var(--dim); border-radius: 4px; padding: 2px 10px; font-size: 11px; cursor: pointer; }
 .pane-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .dialog-score { font-size: 13px; font-weight: 700; color: var(--green); }
 .dialog-timer { font-size: 12px; color: var(--dim); }
@@ -775,6 +779,193 @@ html, body {
   font-family: var(--sans);
 }
 .btn-approve:hover { opacity: .85; }
+
+/* ── Settings: profile grid + checkboxes ─────────────────────── */
+.s-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 10px; }
+.s-field input, .s-field select { width: 100%; min-width: 0; }
+.s-grid .s-wide { grid-column: 1 / -1; }
+.s-grid .s-field:last-child { margin-bottom: 10px; }
+.s-check {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text);
+  margin-bottom: 10px; cursor: pointer;
+}
+.s-check input { accent-color: var(--accent); width: 14px; height: 14px; }
+.opt-fields {
+  border-left: 2px solid var(--bd);
+  padding-left: 12px; margin-top: 4px;
+}
+.opt-fields[hidden] { display: none; }
+
+/* ── OPT clock (sidebar) ─────────────────────────────────────── */
+.visa-card {
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  padding: 10px 10px 12px;
+  --clock: var(--green);
+}
+.visa-card[hidden]       { display: none; }
+.visa-card.warn          { --clock: var(--yellow); }
+.visa-card.critical      { --clock: var(--red); border-color: rgba(248,81,73,.45); }
+.visa-card .sb-label     { margin-bottom: 4px; }
+.opt-days {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 0 4px;
+}
+.opt-days span {
+  font-size: 28px; font-weight: 700; line-height: 1.1;
+  color: var(--clock);
+  font-variant-numeric: tabular-nums;
+}
+.opt-days small { font-size: 11px; color: var(--dim); }
+.opt-bar {
+  height: 4px; margin: 8px 4px 6px;
+  background: var(--bd); border-radius: 2px; overflow: hidden;
+}
+.opt-bar span {
+  display: block; height: 100%; width: 0;
+  background: var(--clock); border-radius: 2px;
+  transition: width .4s ease;
+}
+.opt-meta { font-size: 10.5px; color: var(--dim); padding: 0 4px; line-height: 1.45; }
+
+.sb-note {
+  font-size: 10.5px; color: var(--dim);
+  padding: 0 4px; margin-top: -14px; line-height: 1.45;
+}
+.sb-note:empty { display: none; }
+.sb-note b      { color: var(--text); font-weight: 600; }
+.sb-note.warn   { color: #e3b341; }
+.sb-note code   { font-family: var(--mono); font-size: 10px; }
+
+/* ── Sponsorship verdict badges ──────────────────────────────── */
+.sp-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  font-family: var(--sans);
+  color: var(--v, var(--dim));
+  background: color-mix(in srgb, var(--v, var(--dim)) 14%, transparent);
+}
+.sp-badge::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+}
+.v-likely     { --v: var(--green); }
+.v-possible   { --v: var(--yellow); }
+.v-unlikely   { --v: var(--red); }
+.v-unknown    { --v: var(--dim); }
+.v-not_needed { --v: var(--blue); }
+
+/* ── Sponsorship card (modal strip + Sponsor Check view) ────── */
+.sp-card {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-left: 3px solid var(--v, var(--dim));
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.sp-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sp-head .sp-company { font-size: 15px; font-weight: 600; }
+.sp-head .sp-names   { font-size: 11px; color: var(--dim); }
+.sp-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px;
+}
+.sp-stat {
+  background: var(--bg);
+  border: 1px solid var(--bd);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.sp-stat b    { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sp-stat span { font-size: 10.5px; color: var(--dim); }
+.sp-reasons { list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.sp-reasons li { font-size: 12px; color: var(--dim); padding-left: 14px; position: relative; }
+.sp-reasons li::before { content: "›"; position: absolute; left: 2px; color: var(--v, var(--dim)); font-weight: 700; }
+
+.sp-years { display: flex; align-items: flex-end; gap: 6px; height: 96px; }
+.sp-year  { flex: 1; max-width: 48px; display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; justify-content: flex-end; }
+.sp-year i {
+  display: block; width: 100%; min-height: 2px;
+  background: var(--v, var(--dim)); opacity: .75; border-radius: 3px 3px 0 0;
+}
+.sp-year small { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.sp-section-lbl {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--dim); margin-bottom: 6px;
+}
+.sp-titles { width: 100%; border-collapse: collapse; }
+.sp-titles td { padding: 4px 0; font-size: 12px; border-bottom: 1px solid var(--bd); }
+.sp-titles td:last-child { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+.sp-titles tr:last-child td { border-bottom: none; }
+.sp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+/* Compact variant inside the approval modal */
+.insight-strip {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--bd);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+.insight-strip[hidden] { display: none; }
+.insight-strip .sp-card {
+  flex-direction: row; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 10px 14px;
+}
+.insight-strip .sp-stats  { display: flex; gap: 8px; flex: 1; min-width: 260px; }
+.insight-strip .sp-stat   { padding: 5px 10px; flex: 1; }
+.insight-strip .sp-stat b { font-size: 14px; }
+.insight-strip .sp-reasons { flex-basis: 100%; flex-direction: row; flex-wrap: wrap; gap: 4px 16px; }
+
+/* ── Sponsor Check view ──────────────────────────────────────── */
+.sponsor-wrap { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.sponsor-search { display: flex; gap: 8px; flex-wrap: wrap; max-width: 860px; }
+.sponsor-search input {
+  flex: 1; min-width: 200px;
+  background: var(--s2); border: 1px solid var(--bd);
+  border-radius: var(--r); color: var(--text);
+  padding: 9px 12px; font-size: 13px; outline: none;
+  font-family: var(--sans);
+}
+.sponsor-search input:focus { border-color: var(--accent); }
+.sponsor-result { max-width: 860px; }
+.empty-state {
+  border: 1px dashed var(--bd); border-radius: 8px;
+  padding: 24px; color: var(--dim); font-size: 12.5px; line-height: 1.7;
+}
+.empty-state b    { color: var(--text); }
+.empty-state code {
+  font-family: var(--mono); font-size: 11.5px;
+  background: var(--s2); padding: 1px 6px; border-radius: 4px; color: var(--text);
+}
+.empty-state ol { padding-left: 20px; margin-top: 6px; }
+
+/* Approval footer keyboard hint */
+.kbd-hint { margin-right: auto; align-self: center; font-size: 11.5px; color: var(--dim); }
+kbd {
+  font-family: var(--mono); font-size: 10.5px;
+  border: 1px solid var(--bd); border-bottom-width: 2px;
+  border-radius: 4px; padding: 0 5px; color: var(--text); background: var(--s1);
+}
+
+/* Feed + tracker inline badge spacing */
+.entry.resume .sp-badge { margin-right: 2px; }
+.tracker-wrap .sp-badge { font-size: 10.5px; }
+.money { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 11.5px; margin-left: 6px; }
+
+/* ── Small screens ───────────────────────────────────────────── */
+@media (max-width: 760px) {
+  .sidebar { display: none; }
+  .dialog  { width: 100vw; max-height: 100vh; border-radius: 0; }
+  .dialog-body { grid-template-columns: 1fr; overflow-y: auto; }
+  .dialog-pane { min-height: 42vh; border-right: none; border-bottom: 1px solid var(--bd); }
+  .dialog-timer { display: none; }
+  .kbd-hint { display: none; }
+  .sp-cols  { grid-template-columns: 1fr; }
+  .topbar-end .btn-ghost { padding: 5px 8px; }
+}
 
 /* ── Scrollbar ───────────────────────────────────────────────── */
 ::-webkit-scrollbar       { width: 4px; }

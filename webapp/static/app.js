@@ -147,6 +147,7 @@ function addTailorEntry(msg) {
     <div class="e-header">
       <span class="e-tag">AI</span>
       ${ctx ? `<span class="e-ctx" style="flex:1">${x(ctx)}</span>` : ""}
+      ${sponsorBadge(job.sponsorship)}
       ${ats > 0 ? `<span class="ats-badge ${atsCls}" style="margin-right:4px">ATS ${ats}%</span>` : ""}
       <span class="e-ts">${msg.time||""}</span>
     </div>
@@ -439,10 +440,64 @@ function showSettings() {
   document.getElementById("s-query").value       = ls("jc_query")    || "Java Full Stack Engineer";
   document.getElementById("s-location").value    = ls("jc_location") || "United States";
   document.getElementById("s-max-apps").value    = ls("jc_max_apps") || "30";
+  set("settings-msg", "");
   document.getElementById("settings-overlay").style.display = "block";
+  loadProfileForm();
 }
 
-function saveSettings() {
+/* Profile + visa fields live in profile.json on the server (used by the agent) */
+const PROFILE_FORM = {
+  "p-name":     ["personal", "name"],
+  "p-email":    ["personal", "email"],
+  "p-phone":    ["personal", "phone"],
+  "p-linkedin": ["personal", "linkedin"],
+  "p-city":     ["personal", "city"],
+  "p-state":    ["personal", "state"],
+  "p-status":   ["immigration", "status"],
+  "p-stem":     ["immigration", "stem_opt"],
+  "p-employed": ["immigration", "currently_employed"],
+  "p-days-used":["immigration", "unemployment_days_used"],
+  "p-days-asof":["immigration", "unemployment_as_of"],
+  "p-sponsor-filter": ["preferences", "sponsor_filter"],
+};
+const PROFILE_DEFAULTS = { "p-status": "F1-OPT", "p-sponsor-filter": "unlikely" };
+
+async function loadProfileForm() {
+  let profile = {};
+  try { profile = await fetch("/api/profile").then(r => r.json()); } catch {}
+  for (const [id, [sec, key]] of Object.entries(PROFILE_FORM)) {
+    const el = document.getElementById(id);
+    const v  = profile?.[sec]?.[key];
+    if (el.type === "checkbox") el.checked = !!v;
+    else el.value = v ?? PROFILE_DEFAULTS[id] ?? "";
+  }
+  syncOptFields();
+}
+
+function syncOptFields() {
+  document.getElementById("opt-fields").hidden = document.getElementById("p-status").value !== "F1-OPT";
+}
+
+async function saveProfileForm() {
+  const body = {};
+  for (const [id, [sec, key]] of Object.entries(PROFILE_FORM)) {
+    const el = document.getElementById(id);
+    let v = el.type === "checkbox" ? el.checked : el.value.trim();
+    if (id === "p-days-used") v = v === "" ? 0 : Math.max(0, parseInt(v, 10) || 0);
+    (body[sec] ||= {})[key] = v;
+  }
+  // Starting the clock today if the user entered days but no date
+  if (!body.immigration.unemployment_as_of) {
+    body.immigration.unemployment_as_of = new Date().toISOString().slice(0, 10);
+  }
+  const r = await fetch("/api/profile", {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const d = await r.json();
+  if (!d.ok) throw new Error(d.error || "Could not save profile");
+}
+
+async function saveSettings() {
   lsSet("jc_email",         document.getElementById("s-li-email").value.trim());
   lsSet("jc_password",      document.getElementById("s-li-password").value);
   lsSet("jc_dice_email",    document.getElementById("s-dice-email").value.trim());
@@ -451,8 +506,17 @@ function saveSettings() {
   lsSet("jc_query",         document.getElementById("s-query").value.trim());
   lsSet("jc_location",      document.getElementById("s-location").value.trim());
   lsSet("jc_max_apps",      document.getElementById("s-max-apps").value);
+  const msg = document.getElementById("settings-msg");
+  try {
+    await saveProfileForm();
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.className = "settings-msg error";
+    return;
+  }
   document.getElementById("settings-overlay").style.display = "none";
   addSysEntry("Settings saved.", "success");
+  loadVisa();
 }
 
 function hideSettings() {
@@ -466,6 +530,12 @@ function showModal(msg) {
   set("modal-subtitle", j.location || "");
 
   const isStuck = msg.modal_type === "stuck";
+  const strip   = document.getElementById("modal-insight");
+  const spons   = !isStuck && msg.modal_type !== "email" ? j.sponsorship : null;
+  strip.innerHTML = spons ? renderSponsorCard(spons, { compact: true }) : "";
+  strip.hidden    = !spons;
+  // Drop focus from the command bar so ← / → reach the modal shortcuts
+  if (document.activeElement) document.activeElement.blur();
 
   if (isStuck) {
     // ── Stuck / human-handoff modal ───────────────────────────────
@@ -582,6 +652,7 @@ function showView(name) {
   document.getElementById(`view-${name}`).classList.add("active");
   if (name === "tracker") loadTracker();
   if (name === "resumes") loadResumes();
+  if (name === "sponsors") setTimeout(() => document.getElementById("sp-company").focus(), 0);
 }
 
 /* ── Resumes ────────────────────────────────────────────────── */
@@ -797,14 +868,137 @@ async function loadTracker() {
         <td>${x(a.company)}</td>
         <td>${x(a.role)}</td>
         <td>${x(a.source||"")}</td>
+        <td>${sponsorBadge(a.sponsorship)}${a.sponsorship?.median_wage ? `<span class="money">${money(a.sponsorship.median_wage)}</span>` : ""}</td>
         <td><span class="badge ${bc(a.status)}">${x(a.status)}</span></td>
       </tr>`).join("");
     wrap.innerHTML = `<table>
-      <thead><tr><th>#</th><th>Date</th><th>Company</th><th>Role</th><th>Source</th><th>Status</th></tr></thead>
+      <thead><tr><th>#</th><th>Date</th><th>Company</th><th>Role</th><th>Source</th><th>Sponsor</th><th>Status</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
   } catch {
     wrap.innerHTML = "<p style='padding:20px;color:var(--dim)'>Could not load.</p>";
+  }
+}
+
+/* ── Sponsorship ────────────────────────────────────────────── */
+const VERDICT_LABEL = {
+  likely: "Sponsors", possible: "May sponsor", unlikely: "Won't sponsor",
+  unknown: "No H-1B record", not_needed: "Not needed",
+};
+
+function sponsorBadge(sp) {
+  if (!sp?.verdict || sp.verdict === "not_needed") return "";
+  const n = sp.h1b?.filings ?? sp.filings;
+  const title = n ? `${n.toLocaleString()} certified H-1B filings` : VERDICT_LABEL[sp.verdict];
+  return `<span class="sp-badge v-${x(sp.verdict)}" title="${x(title)}">${x(sp.label || VERDICT_LABEL[sp.verdict])}</span>`;
+}
+
+const money = n => n ? `$${Math.round(n / 1000)}k` : "–";
+
+function renderSponsorCard(sp, { compact = false, company = "" } = {}) {
+  const v   = sp.verdict || "unknown";
+  const h   = sp.h1b || null;
+  const tm  = h?.title_match || null;
+  const stat = (val, lbl) => `<div class="sp-stat"><b>${val}</b><span>${x(lbl)}</span></div>`;
+
+  const stats = h ? [
+    stat(h.filings.toLocaleString(), "H-1B filings"),
+    tm ? stat(tm.filings.toLocaleString(), "for this role") : "",
+    stat(money(tm?.median_wage || h.median_wage), tm ? "median pay, role" : "median pay"),
+    tm?.median_pw ? stat(money(tm.median_pw), "prevailing wage") : "",
+  ].join("") : "";
+
+  const reasons = (sp.reasons || []).map(r => `<li>${x(r)}</li>`).join("");
+  const head = `
+    <div class="sp-head">
+      <span class="sp-badge v-${x(v)}">${x(sp.label || VERDICT_LABEL[v])}</span>
+      ${company ? `<span class="sp-company">${x(company)}</span>` : ""}
+      ${h?.employer_names?.length ? `<span class="sp-names">${x(h.employer_names.join(" · "))}</span>` : ""}
+    </div>`;
+
+  if (compact) {
+    return `<div class="sp-card v-${x(v)}">${head}${stats ? `<div class="sp-stats">${stats}</div>` : ""}<ul class="sp-reasons">${reasons}</ul></div>`;
+  }
+
+  const years = Object.entries(h?.by_year || {});
+  const peak  = Math.max(1, ...years.map(([, c]) => c));
+  const bars  = years.map(([fy, c]) => `
+    <div class="sp-year" title="FY${x(fy)}: ${c.toLocaleString()} filings">
+      <i style="height:${Math.max(3, Math.round(c / peak * 100))}%"></i><small>FY${x(String(fy).slice(2))}</small>
+    </div>`).join("");
+  const titles = (h?.top_titles || []).map(([t, c]) =>
+    `<tr><td>${x(t)}</td><td>${c.toLocaleString()}</td></tr>`).join("");
+
+  return `
+    <div class="sp-card v-${x(v)}">
+      ${head}
+      ${stats ? `<div class="sp-stats">${stats}</div>` : ""}
+      ${h ? `<div class="sp-cols">
+        <div><div class="sp-section-lbl">Filings by fiscal year</div><div class="sp-years">${bars}</div></div>
+        <div><div class="sp-section-lbl">Most-filed roles</div><table class="sp-titles">${titles}</table></div>
+      </div>` : ""}
+      <ul class="sp-reasons">${reasons}</ul>
+    </div>`;
+}
+
+function sponsorDbEmptyState() {
+  return `<div class="empty-state">
+    <b>H-1B data isn't loaded yet.</b> Sponsor Check reads the Department of Labor's public LCA disclosure files.
+    <ol>
+      <li>Download the latest <b>LCA Programs</b> .xlsx files from
+        <code>dol.gov/agencies/eta/foreign-labor/performance</code> (the last 2–3 fiscal years)</li>
+      <li>Run <code>python scripts/build_sponsor_db.py path/to/LCA_Disclosure_Data_FY2025_Q4.xlsx …</code></li>
+      <li>Refresh this page</li>
+    </ol>
+    Until then, verdicts use only the job description's own sponsorship language.
+  </div>`;
+}
+
+async function checkSponsor(e) {
+  e?.preventDefault();
+  const company = document.getElementById("sp-company").value.trim();
+  const title   = document.getElementById("sp-title").value.trim();
+  const out     = document.getElementById("sponsor-result");
+  if (!company) return;
+  out.innerHTML = `<div class="empty-state">Checking ${x(company)}…</div>`;
+  try {
+    const sp = await fetch(`/api/sponsor?company=${encodeURIComponent(company)}&title=${encodeURIComponent(title)}`)
+      .then(r => r.json());
+    if (sp.error) { out.innerHTML = `<div class="empty-state">${x(sp.error)}</div>`; return; }
+    out.innerHTML = sp.db?.available ? renderSponsorCard(sp, { company }) : sponsorDbEmptyState();
+  } catch {
+    out.innerHTML = `<div class="empty-state">Could not reach the server.</div>`;
+  }
+}
+
+/* ── Visa: OPT clock + data status (sidebar) ────────────────── */
+async function loadVisa() {
+  let v;
+  try { v = await fetch("/api/visa").then(r => r.json()); } catch { return; }
+
+  const card = document.getElementById("visa-card");
+  const opt  = v.opt || {};
+  card.hidden = !opt.applicable;
+  if (opt.applicable) {
+    card.className = `sb-group visa-card ${opt.urgency}`;
+    set("opt-left", opt.left);
+    set("opt-unit", opt.left === 1 ? "day left" : "days left");
+    document.getElementById("opt-bar-fill").style.width = `${Math.round(opt.left / opt.limit * 100)}%`;
+    set("opt-meta", `${opt.used} of ${opt.limit} unemployment days used` +
+      (opt.stem ? " · STEM" : "") + (opt.employed ? " · paused (employed)" : ""));
+  }
+
+  const note = document.getElementById("sponsor-db-note");
+  const db = v.sponsor_db || {};
+  if (db.available) {
+    const fy = db.fy_min && db.fy_max ? (db.fy_min === db.fy_max ? ` · FY${db.fy_min}` : ` · FY${db.fy_min}–${db.fy_max}`) : "";
+    note.className = "sb-note";
+    note.innerHTML = `H-1B data: <b>${db.rows.toLocaleString()}</b> filings${fy}`;
+  } else if (v.needs_sponsorship) {
+    note.className = "sb-note warn";
+    note.innerHTML = `H-1B data not loaded. Open <b>Sponsor Check</b> for setup.`;
+  } else {
+    note.innerHTML = "";
   }
 }
 
@@ -845,11 +1039,23 @@ document.getElementById("btn-tracker")      .addEventListener("click", () => sho
 document.getElementById("btn-back")         .addEventListener("click", () => showView("feed"));
 document.getElementById("btn-resumes")      .addEventListener("click", () => showView("resumes"));
 document.getElementById("btn-back-resumes") .addEventListener("click", () => showView("feed"));
+document.getElementById("btn-sponsors")     .addEventListener("click", () => showView("sponsors"));
+document.getElementById("btn-back-sponsors").addEventListener("click", () => showView("feed"));
+document.getElementById("sponsor-form")     .addEventListener("submit", checkSponsor);
+document.getElementById("p-status")         .addEventListener("change", syncOptFields);
 document.getElementById("btn-settings").addEventListener("click", showSettings);
 document.getElementById("settings-close").addEventListener("click", hideSettings);
 document.getElementById("settings-save") .addEventListener("click", saveSettings);
 document.getElementById("settings-overlay").addEventListener("click", e => {
   if (e.target === e.currentTarget) hideSettings();
+});
+
+// Approval modal shortcuts: ← skip, → approve (ignored while typing)
+document.addEventListener("keydown", e => {
+  if (document.getElementById("approval-modal").style.display === "none") return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "ArrowRight") { e.preventDefault(); approve(true); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); approve(false); }
 });
 
 // Suggestion pills
@@ -929,6 +1135,7 @@ connect();
 initChips();
 initModes();
 initResumeUpload();
+loadVisa();
 
 // Show settings on first run if no creds saved
 if (!ls("jc_email")) {

@@ -22,8 +22,9 @@ def _save(applications: list):
         json.dump(applications, f, indent=2)
 
 
-def add_application(company: str, role: str, source: str, notes: str = "") -> dict:
-    """Log a new job application."""
+def add_application(company: str, role: str, source: str, notes: str = "",
+                    sponsorship: dict = None) -> dict:
+    """Log a new job application. sponsorship: sponsorship.compact() summary."""
     applications = _load()
     app = {
         "id": len(applications) + 1,
@@ -33,6 +34,7 @@ def add_application(company: str, role: str, source: str, notes: str = "") -> di
         "source": source,         # LinkedIn, Indeed, company portal, recruiter email
         "status": "Applied",
         "notes": notes,
+        "sponsorship": sponsorship or {},
         "history": [
             {"status": "Applied", "date": datetime.now().strftime("%Y-%m-%d %H:%M")}
         ],

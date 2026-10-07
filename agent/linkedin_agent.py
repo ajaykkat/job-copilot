@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 from tailor import check_relevance, tailor_resume, analyze_skills_gap, generate_cover_letter, _call_openai
 from tracker import add_application, is_already_applied
+from sponsorship import sponsor_gate, compact as sponsor_compact
 from agent.pdf_generator import generate_pdf
 from agent.docx_generator import generate_docx
 from agent.filter_agent import LinkedInFilterAgent
@@ -1059,6 +1060,17 @@ class LinkedInAgent:
                             if self.bridge: self.bridge.inc_skipped()
                             continue
 
+                        # Sponsorship: H-1B history + JD language
+                        spons, spons_skip = sponsor_gate(company, title, jd, self.profile)
+                        job_ref["sponsorship"] = spons
+                        if spons_skip:
+                            self._log(f"Sponsorship — {spons_skip} — skipping", "skip", job_ref)
+                            self.skipped += 1
+                            if self.bridge: self.bridge.inc_skipped()
+                            continue
+                        if spons["verdict"] != "not_needed":
+                            self._log(f"Sponsorship: {spons['label']} — {'; '.join(spons['reasons'][:2])}", job=job_ref)
+
                         # ── Step 1: Scan JD ───────────────────────────────────
                         if self.bridge:
                             self.bridge.tailor_progress([
@@ -1133,6 +1145,7 @@ class LinkedInAgent:
                             "title": title, "company": company,
                             "location": d.get("location", ""),
                             "jd": jd[:3000], "score": rel.get("score", 0),
+                            "sponsorship": spons,
                         }
                         self._current_tailored = tailored
 
@@ -1483,7 +1496,8 @@ class LinkedInAgent:
                             source = "External Portal" if is_external else "LinkedIn Easy Apply"
                             add_application(
                                 company, title, source,
-                                notes=f"learn: {rel.get('learn','')}" if rel["decision"] == "APPLY_LEARN" else ""
+                                notes=f"learn: {rel.get('learn','')}" if rel["decision"] == "APPLY_LEARN" else "",
+                                sponsorship=sponsor_compact(spons),
                             )
                             self._log(f"Applied ({self.applied}/{max_applications})", "success", self._current_job)
                             if self.bridge: self.bridge.inc_applied()

@@ -8,6 +8,9 @@ An AI-powered job application agent that automatically finds, evaluates, and app
 
 ## Features
 
+- **Sponsorship intelligence** — every job gets a verdict (*Sponsors / May sponsor / Won't sponsor / No H-1B record*) built from public DOL H-1B filings plus the job description's own sponsorship language. Shows filings for the exact role, median pay and prevailing wage
+- **OPT clock** — tracks your F-1 OPT unemployment days (90, or 150 with STEM) right in the sidebar
+- **Sponsor Check** — look up any company's H-1B history before you apply
 - **Multi-platform** — LinkedIn Easy Apply, Indeed, Dice, and external ATS portals (Workday, Greenhouse, Lever, iCIMS, and more)
 - **AI resume tailoring** — rewrites your resume for each job using GPT-4o-mini, generates DOCX and PDF in 3 templates (Classic, Modern, Executive)
 - **Fit scoring** — scores each job 1–10 and skips poor matches automatically based on your effort threshold
@@ -15,7 +18,7 @@ An AI-powered job application agent that automatically finds, evaluates, and app
 - **Live web dashboard** — real-time feed, approval modal, application tracker, resumes viewer
 - **Ask / Auto / Plan modes** — review each application before submitting, auto-apply, or just plan without submitting
 - **Skills gap analysis** — highlights strong matches and missing skills for every tailored resume
-- **Human-in-the-loop** — 8-second reading pause before every application; one click to skip or approve
+- **Human-in-the-loop** — 8-second reading pause before every application; one click (or ← / →) to skip or approve
 
 ---
 
@@ -60,9 +63,21 @@ python run.py
 
 Open [http://localhost:8000](http://localhost:8000) in your browser.
 
-### 4. Configure
+### 4. Load H-1B sponsorship data (recommended)
+
+Download the latest **LCA Programs (H-1B, H-1B1, E-3)** disclosure `.xlsx` files from the
+[DOL performance data page](https://www.dol.gov/agencies/eta/foreign-labor/performance) (the last 2–3 fiscal years is plenty), then:
+
+```bash
+python scripts/build_sponsor_db.py ~/Downloads/LCA_Disclosure_Data_FY2025_Q4.xlsx ~/Downloads/LCA_Disclosure_Data_FY2024_Q4.xlsx
+```
+
+This builds `data/sponsors.db` locally. Without it, verdicts fall back to the job description's wording only.
+
+### 5. Configure
 
 Click the ⚙ Settings button and fill in:
+- Profile (name, contact) and **Visa & Sponsorship** (work status, OPT days used, sponsorship filter)
 - LinkedIn email + password
 - Dice email + password (optional)
 - OpenAI API key (for resume tailoring + fit scoring)
@@ -92,6 +107,11 @@ xHR/
 │       ├── index.html      # Dashboard UI
 │       ├── app.js          # Frontend logic
 │       └── style.css       # Styles
+├── scripts/
+│   └── build_sponsor_db.py # DOL LCA files → data/sponsors.db
+├── tests/                  # pytest suite
+├── sponsorship.py          # H-1B lookup + per-job sponsorship verdict
+├── visa.py                 # OPT unemployment clock
 ├── tailor.py               # OpenAI resume tailoring + fit scoring
 ├── prompts.py              # All AI prompts
 ├── tracker.py              # Application history (JSON)
@@ -138,3 +158,12 @@ plyer
 ## License
 
 MIT
+
+---
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```

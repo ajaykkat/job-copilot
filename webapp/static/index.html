@@ -20,6 +20,7 @@
         <span id="status-text">Ready</span>
       </div>
       <div class="topbar-end">
+        <button class="btn-ghost" id="btn-sponsors">Sponsor Check</button>
         <button class="btn-ghost" id="btn-tracker">Applications</button>
         <button class="btn-ghost" id="btn-resumes">Resumes</button>
         <button class="btn-ghost" id="btn-settings" title="Settings">⚙</button>
@@ -32,6 +33,14 @@
 
       <!-- Sidebar -->
       <aside class="sidebar">
+        <div class="sb-group visa-card" id="visa-card" hidden>
+          <div class="sb-label">OPT Clock</div>
+          <div class="opt-days"><span id="opt-left">–</span><small id="opt-unit">days left</small></div>
+          <div class="opt-bar"><span id="opt-bar-fill"></span></div>
+          <div class="opt-meta" id="opt-meta"></div>
+        </div>
+        <div class="sb-note" id="sponsor-db-note"></div>
+
         <div class="sb-group">
           <div class="sb-label">Platforms</div>
           <label class="platform">
@@ -151,6 +160,22 @@
           <div id="tracker-table" class="tracker-wrap"></div>
         </div>
 
+        <!-- Sponsor check view -->
+        <div id="view-sponsors" class="view">
+          <div class="view-bar">
+            <span>Sponsor Check</span>
+            <button class="btn-ghost sm" id="btn-back-sponsors">← Back</button>
+          </div>
+          <div class="sponsor-wrap">
+            <form class="sponsor-search" id="sponsor-form" autocomplete="off">
+              <input id="sp-company" type="text" placeholder="Company, e.g. Capital One" required>
+              <input id="sp-title"   type="text" placeholder="Role (optional), e.g. Software Engineer">
+              <button class="btn-run" type="submit">Check</button>
+            </form>
+            <div id="sponsor-result" class="sponsor-result"></div>
+          </div>
+        </div>
+
         <!-- Resumes view -->
         <div id="view-resumes" class="view">
           <div class="view-bar">
@@ -230,50 +255,70 @@
       </div>
       <div class="settings-body">
         <div class="settings-section">
+          <div class="settings-section-title">Profile</div>
+          <div class="s-grid">
+            <label class="s-field s-wide"><span>Full name</span><input type="text" id="p-name"></label>
+            <label class="s-field"><span>Email</span><input type="email" id="p-email"></label>
+            <label class="s-field"><span>Phone</span><input type="tel" id="p-phone"></label>
+            <label class="s-field s-wide"><span>LinkedIn URL</span><input type="url" id="p-linkedin" placeholder="https://linkedin.com/in/…"></label>
+            <label class="s-field"><span>City</span><input type="text" id="p-city"></label>
+            <label class="s-field"><span>State</span><input type="text" id="p-state" maxlength="2" placeholder="TX"></label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Visa &amp; Sponsorship</div>
+          <label class="s-field">
+            <span>Work status</span>
+            <select id="p-status">
+              <option value="F1-OPT">F-1 OPT</option>
+              <option value="F1-CPT">F-1 CPT</option>
+              <option value="H1B">H-1B</option>
+              <option value="L1">L-1</option>
+              <option value="TN">TN</option>
+              <option value="EAD">EAD</option>
+              <option value="GC">Green Card</option>
+              <option value="USC">US Citizen</option>
+            </select>
+          </label>
+          <label class="s-field">
+            <span>Sponsorship filter</span>
+            <select id="p-sponsor-filter">
+              <option value="off">Off: apply regardless</option>
+              <option value="unlikely">Skip jobs that say they won't sponsor</option>
+              <option value="strict">Strict: only companies with H-1B history</option>
+            </select>
+          </label>
+          <div class="opt-fields" id="opt-fields">
+            <label class="s-check"><input type="checkbox" id="p-stem"><span>STEM OPT extension (150-day limit)</span></label>
+            <label class="s-check"><input type="checkbox" id="p-employed"><span>Currently employed (clock paused)</span></label>
+            <div class="s-grid">
+              <label class="s-field"><span>Unemployment days used</span><input type="number" id="p-days-used" min="0" max="150"></label>
+              <label class="s-field"><span>As of</span><input type="date" id="p-days-asof"></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
           <div class="settings-section-title">LinkedIn</div>
-          <label class="s-field">
-            <span>Email</span>
-            <input type="email"    id="s-li-email"    placeholder="you@email.com">
-          </label>
-          <label class="s-field">
-            <span>Password</span>
-            <input type="password" id="s-li-password" placeholder="••••••••">
-          </label>
+          <label class="s-field"><span>Email</span><input type="email" id="s-li-email" placeholder="you@email.com"></label>
+          <label class="s-field"><span>Password</span><input type="password" id="s-li-password" placeholder="••••••••"></label>
         </div>
         <div class="settings-section">
           <div class="settings-section-title">Dice</div>
-          <label class="s-field">
-            <span>Email</span>
-            <input type="email"    id="s-dice-email"    placeholder="you@email.com">
-          </label>
-          <label class="s-field">
-            <span>Password</span>
-            <input type="password" id="s-dice-password" placeholder="••••••••">
-          </label>
+          <label class="s-field"><span>Email</span><input type="email" id="s-dice-email" placeholder="you@email.com"></label>
+          <label class="s-field"><span>Password</span><input type="password" id="s-dice-password" placeholder="••••••••"></label>
         </div>
         <div class="settings-section">
           <div class="settings-section-title">AI</div>
-          <label class="s-field">
-            <span>OpenAI API Key</span>
-            <input type="password" id="s-openai-key" placeholder="sk-...">
-          </label>
+          <label class="s-field"><span>OpenAI API Key</span><input type="password" id="s-openai-key" placeholder="sk-..."></label>
         </div>
         <div class="settings-section">
           <div class="settings-section-title">Defaults</div>
-          <label class="s-field">
-            <span>Job Title</span>
-            <input type="text" id="s-query"    value="Java Full Stack Engineer">
-          </label>
-          <label class="s-field">
-            <span>Location</span>
-            <input type="text" id="s-location" value="United States">
-          </label>
-          <label class="s-field">
-            <span>Max per platform</span>
-            <input type="number" id="s-max-apps" value="30" min="1" max="200">
-          </label>
+          <label class="s-field"><span>Job Title</span><input type="text" id="s-query" value="Java Full Stack Engineer"></label>
+          <label class="s-field"><span>Location</span><input type="text" id="s-location" value="United States"></label>
+          <label class="s-field"><span>Max per platform</span><input type="number" id="s-max-apps" value="30" min="1" max="200"></label>
         </div>
-      </div>
         <div class="settings-section">
           <div class="settings-section-title">Resume</div>
           <div class="resume-drop" id="resume-drop">
@@ -286,6 +331,7 @@
         </div>
       </div>
       <div class="settings-ft">
+        <span class="settings-msg" id="settings-msg"></span>
         <button class="btn-run" id="settings-save">Save</button>
       </div>
     </div>
@@ -308,6 +354,7 @@
           <span class="dialog-timer">Auto-skip <b id="countdown">300</b>s</span>
         </div>
       </div>
+      <div class="insight-strip" id="modal-insight" hidden></div>
       <div class="dialog-body">
         <div class="dialog-pane">
           <div class="pane-hd">Job Description</div>
@@ -334,6 +381,7 @@
         </div>
       </div>
       <div class="dialog-ft">
+        <span class="kbd-hint"><kbd>←</kbd> skip &nbsp;·&nbsp; <kbd>→</kbd> approve</span>
         <button class="btn-skip"    id="btn-reject">✕ Skip</button>
         <button class="btn-approve" id="btn-approve">✓ Approve &amp; Submit</button>
       </div>

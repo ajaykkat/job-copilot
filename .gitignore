@@ -27,6 +27,13 @@ diagnose_output.txt
 # Application tracker (local state)
 applications.json
 
+# H-1B sponsor database (built locally from DOL files — large)
+data/sponsors.db
+data/sponsors.db.tmp
+
+# Test cache
+.pytest_cache/
+
 # OS
 .DS_Store
 Thumbs.db

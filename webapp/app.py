@@ -237,17 +237,82 @@ async def get_applications():
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+PROFILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "profile.json")
+
+# Profile sections + fields the Settings panel is allowed to write
+PROFILE_FIELDS = {
+    "personal":    {"name", "email", "phone", "linkedin", "github", "city", "state", "zip", "country"},
+    "immigration": {"status", "stem_opt", "currently_employed", "unemployment_days_used", "unemployment_as_of"},
+    "education":   {"degree", "field", "school", "graduation_year"},
+    "preferences": {"salary_min", "salary_text", "job_type", "sponsor_filter"},
+}
+
+
+def _load_profile() -> dict:
+    if os.path.exists(PROFILE_PATH):
+        with open(PROFILE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
 @app.get("/api/profile")
 async def get_profile():
     try:
-        import json
-        profile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "profile.json")
-        if os.path.exists(profile_path):
-            with open(profile_path, "r") as f:
-                return json.load(f)
-        return {}
+        return _load_profile()
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.put("/api/profile")
+async def save_profile(body: dict):
+    """Merge whitelisted fields from the Settings panel into profile.json."""
+    try:
+        from user_profile import IMMIGRATION_ANSWERS
+        from sponsorship import SKIP_VERDICTS
+        profile = _load_profile()
+        for section, fields in PROFILE_FIELDS.items():
+            incoming = body.get(section)
+            if not isinstance(incoming, dict):
+                continue
+            current = profile.setdefault(section, {})
+            for k, v in incoming.items():
+                if k in fields:
+                    current[k] = v
+        imm = profile.get("immigration", {})
+        if imm.get("status") and imm["status"] not in IMMIGRATION_ANSWERS:
+            return JSONResponse({"ok": False, "error": f"Unknown status {imm['status']}"}, status_code=400)
+        pref = profile.get("preferences", {})
+        if pref.get("sponsor_filter") and pref["sponsor_filter"] not in SKIP_VERDICTS:
+            return JSONResponse({"ok": False, "error": "Unknown sponsor_filter"}, status_code=400)
+        with open(PROFILE_PATH, "w", encoding="utf-8") as f:
+            json.dump(profile, f, indent=2)
+        return {"ok": True}
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/api/visa")
+async def get_visa():
+    """OPT unemployment clock + whether the user needs sponsorship."""
+    from visa import opt_clock
+    from sponsorship import needs_sponsorship, get_db
+    profile = _load_profile()
+    return {
+        "status":            profile.get("immigration", {}).get("status", ""),
+        "needs_sponsorship": needs_sponsorship(profile) if profile else True,
+        "opt":               opt_clock(profile),
+        "sponsor_db":        get_db().status(),
+    }
+
+
+@app.get("/api/sponsor")
+async def sponsor_lookup(company: str, title: str = "", jd: str = ""):
+    """Look up a company's H-1B history (and a role, if given)."""
+    from sponsorship import assess, get_db
+    if not company.strip():
+        return JSONResponse({"error": "company is required"}, status_code=400)
+    profile = _load_profile()
+    return {**assess(company, title, jd, profile), "db": get_db().status()}
 
 
 @app.websocket("/ws")
@@ -384,10 +449,15 @@ def run_agent_thread(config: dict):
     import traceback
 
     try:
-        from user_profile import get_or_setup_profile
         from tailor import get_client
 
-        profile  = get_or_setup_profile()
+        # Never call get_or_setup_profile() here — its input() prompts would
+        # block this server thread forever. The profile comes from Settings.
+        profile  = _load_profile()
+        if not profile.get("personal", {}).get("name"):
+            bridge.log("Fill in your Profile in Settings (⚙) before running the agent.",
+                       level="error", tool="System")
+            return
         api_key  = config.get("openai_api_key") or os.environ.get("OPENAI_API_KEY", "")
         client   = get_client(api_key)
         platforms = config.get("platforms", {})
