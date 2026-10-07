@@ -1,5 +1,6 @@
 /* ── Reset ───────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
 
 :root {
   --bg:     #0d1117;
@@ -790,7 +791,8 @@ html, body {
   font-size: 12px; color: var(--text);
   margin-bottom: 10px; cursor: pointer;
 }
-.s-check input { accent-color: var(--accent); width: 14px; height: 14px; }
+.s-check input { accent-color: var(--accent); width: 14px; height: 14px; flex-shrink: 0; }
+.s-check b { font-weight: 600; }
 .opt-fields {
   border-left: 2px solid var(--bd);
   padding-left: 12px; margin-top: 4px;
@@ -832,8 +834,9 @@ html, body {
 
 .sb-note {
   font-size: 10.5px; color: var(--dim);
-  padding: 0 4px; margin-top: -14px; line-height: 1.45;
+  padding: 0 4px; line-height: 1.45;
 }
+.visa-card:not([hidden]) + .sb-note { margin-top: -14px; }
 .sb-note:empty { display: none; }
 .sb-note b      { color: var(--text); font-weight: 600; }
 .sb-note.warn   { color: #e3b341; }
@@ -901,6 +904,12 @@ html, body {
 .sp-titles td:last-child { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
 .sp-titles tr:last-child td { border-bottom: none; }
 .sp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.sp-cols.one { grid-template-columns: 1fr; }
+.sp-country {
+  margin-left: auto; font-size: 11px; color: var(--dim);
+  border: 1px solid var(--bd); border-radius: 10px; padding: 1px 8px;
+}
+.sp-source { font-size: 10.5px; color: var(--dim); opacity: .8; }
 
 /* Compact variant inside the approval modal */
 .insight-strip {
@@ -922,6 +931,13 @@ html, body {
 /* ── Sponsor Check view ──────────────────────────────────────── */
 .sponsor-wrap { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .sponsor-search { display: flex; gap: 8px; flex-wrap: wrap; max-width: 860px; }
+.sponsor-search select {
+  background: var(--s2); border: 1px solid var(--bd);
+  border-radius: var(--r); color: var(--text);
+  padding: 9px 10px; font-size: 13px; outline: none; font-family: var(--sans);
+  max-width: 220px;
+}
+.sponsor-search select:focus { border-color: var(--accent); }
 .sponsor-search input {
   flex: 1; min-width: 200px;
   background: var(--s2); border: 1px solid var(--bd);

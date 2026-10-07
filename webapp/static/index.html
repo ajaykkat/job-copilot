@@ -168,6 +168,7 @@
           </div>
           <div class="sponsor-wrap">
             <form class="sponsor-search" id="sponsor-form" autocomplete="off">
+              <select id="sp-country" aria-label="Country"></select>
               <input id="sp-company" type="text" placeholder="Company, e.g. Capital One" required>
               <input id="sp-title"   type="text" placeholder="Role (optional), e.g. Software Engineer">
               <button class="btn-run" type="submit">Check</button>
@@ -262,14 +263,23 @@
             <label class="s-field"><span>Phone</span><input type="tel" id="p-phone"></label>
             <label class="s-field s-wide"><span>LinkedIn URL</span><input type="url" id="p-linkedin" placeholder="https://linkedin.com/in/…"></label>
             <label class="s-field"><span>City</span><input type="text" id="p-city"></label>
-            <label class="s-field"><span>State</span><input type="text" id="p-state" maxlength="2" placeholder="TX"></label>
+            <label class="s-field"><span>State / region</span><input type="text" id="p-state"></label>
           </div>
         </div>
 
         <div class="settings-section">
-          <div class="settings-section-title">Visa &amp; Sponsorship</div>
+          <div class="settings-section-title">Where you're job hunting</div>
           <label class="s-field">
-            <span>Work status</span>
+            <span>Job-search country</span>
+            <select id="p-job-country"></select>
+          </label>
+          <label class="s-check" id="auth-block">
+            <input type="checkbox" id="p-authorized">
+            <span>I can already work in <b id="auth-country">this country</b> without employer sponsorship</span>
+          </label>
+          <div id="us-visa-block">
+          <label class="s-field">
+            <span>US work status</span>
             <select id="p-status">
               <option value="F1-OPT">F-1 OPT</option>
               <option value="F1-CPT">F-1 CPT</option>
@@ -281,14 +291,6 @@
               <option value="USC">US Citizen</option>
             </select>
           </label>
-          <label class="s-field">
-            <span>Sponsorship filter</span>
-            <select id="p-sponsor-filter">
-              <option value="off">Off: apply regardless</option>
-              <option value="unlikely">Skip jobs that say they won't sponsor</option>
-              <option value="strict">Strict: only companies with H-1B history</option>
-            </select>
-          </label>
           <div class="opt-fields" id="opt-fields">
             <label class="s-check"><input type="checkbox" id="p-stem"><span>STEM OPT extension (150-day limit)</span></label>
             <label class="s-check"><input type="checkbox" id="p-employed"><span>Currently employed (clock paused)</span></label>
@@ -297,6 +299,15 @@
               <label class="s-field"><span>As of</span><input type="date" id="p-days-asof"></label>
             </div>
           </div>
+          </div>
+          <label class="s-field">
+            <span>Sponsorship filter</span>
+            <select id="p-sponsor-filter">
+              <option value="off">Off: apply regardless</option>
+              <option value="unlikely">Skip jobs that say they won't sponsor</option>
+              <option value="strict">Strict: only employers with a sponsorship record</option>
+            </select>
+          </label>
         </div>
 
         <div class="settings-section">

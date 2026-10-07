@@ -8,9 +8,13 @@ An AI-powered job application agent that automatically finds, evaluates, and app
 
 ## Features
 
-- **Sponsorship intelligence** — every job gets a verdict (*Sponsors / May sponsor / Won't sponsor / No H-1B record*) built from public DOL H-1B filings plus the job description's own sponsorship language. Shows filings for the exact role, median pay and prevailing wage
-- **OPT clock** — tracks your F-1 OPT unemployment days (90, or 150 with STEM) right in the sidebar
-- **Sponsor Check** — look up any company's H-1B history before you apply
+- **Works in any country** — pick where you're job hunting; each job's country is detected from its location, and work-permit checks follow that country's rules
+- **Sponsorship intelligence** — every job gets a verdict (*Sponsors / May sponsor / Won't sponsor / No record*) from the job country's public employer data plus the job post's own wording:
+  - 🇺🇸 United States: DOL H-1B filings (filings for the exact role, median pay, prevailing wage)
+  - 🇬🇧 United Kingdom: Home Office Register of Licensed Sponsors
+  - Every other country: the job post's wording (more country packs coming; see `regions/`)
+- **OPT clock** — US F-1 OPT unemployment days (90, or 150 with STEM) right in the sidebar
+- **Sponsor Check** — look up any employer in any supported country before you apply
 - **Multi-platform** — LinkedIn Easy Apply, Indeed, Dice, and external ATS portals (Workday, Greenhouse, Lever, iCIMS, and more)
 - **AI resume tailoring** — rewrites your resume for each job using GPT-4o-mini, generates DOCX and PDF in 3 templates (Classic, Modern, Executive)
 - **Fit scoring** — scores each job 1–10 and skips poor matches automatically based on your effort threshold
@@ -63,21 +67,28 @@ python run.py
 
 Open [http://localhost:8000](http://localhost:8000) in your browser.
 
-### 4. Load H-1B sponsorship data (recommended)
+### 4. Load sponsor data for your countries (recommended)
 
-Download the latest **LCA Programs (H-1B, H-1B1, E-3)** disclosure `.xlsx` files from the
-[DOL performance data page](https://www.dol.gov/agencies/eta/foreign-labor/performance) (the last 2–3 fiscal years is plenty), then:
+**United States**: download the latest **LCA Programs (H-1B, H-1B1, E-3)** `.xlsx` files from the
+[DOL performance data page](https://www.dol.gov/agencies/eta/foreign-labor/performance) (the last 2–3 fiscal years is plenty):
 
 ```bash
-python scripts/build_sponsor_db.py ~/Downloads/LCA_Disclosure_Data_FY2025_Q4.xlsx ~/Downloads/LCA_Disclosure_Data_FY2024_Q4.xlsx
+python scripts/build_sponsor_db.py --country US ~/Downloads/LCA_Disclosure_Data_FY2025_Q4.xlsx
 ```
 
-This builds `data/sponsors.db` locally. Without it, verdicts fall back to the job description's wording only.
+**United Kingdom**: download the **Register of licensed sponsors: workers** CSV from
+[gov.uk](https://www.gov.uk/government/publications/register-of-licensed-sponsors-workers):
+
+```bash
+python scripts/build_sponsor_db.py --country GB ~/Downloads/Worker_and_Temporary_Worker.csv
+```
+
+Each country is stored in `data/regions/<code>.db`. Without it, verdicts fall back to the job post's wording.
 
 ### 5. Configure
 
 Click the ⚙ Settings button and fill in:
-- Profile (name, contact) and **Visa & Sponsorship** (work status, OPT days used, sponsorship filter)
+- Profile (name, contact) and **Where you're job hunting** (country, whether you can already work there, sponsorship filter; US users also set visa status and OPT days)
 - LinkedIn email + password
 - Dice email + password (optional)
 - OpenAI API key (for resume tailoring + fit scoring)
@@ -108,9 +119,10 @@ xHR/
 │       ├── app.js          # Frontend logic
 │       └── style.css       # Styles
 ├── scripts/
-│   └── build_sponsor_db.py # DOL LCA files → data/sponsors.db
+│   └── build_sponsor_db.py # Public sponsor data → data/regions/<country>.db
 ├── tests/                  # pytest suite
-├── sponsorship.py          # H-1B lookup + per-job sponsorship verdict
+├── regions/                # Country packs: us.py (H-1B), uk.py (sponsor register), registry
+├── sponsorship.py          # Per-job sponsorship verdict (country data + job-post wording)
 ├── visa.py                 # OPT unemployment clock
 ├── tailor.py               # OpenAI resume tailoring + fit scoring
 ├── prompts.py              # All AI prompts

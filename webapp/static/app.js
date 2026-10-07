@@ -459,8 +459,10 @@ const PROFILE_FORM = {
   "p-days-used":["immigration", "unemployment_days_used"],
   "p-days-asof":["immigration", "unemployment_as_of"],
   "p-sponsor-filter": ["preferences", "sponsor_filter"],
+  "p-job-country":    ["preferences", "job_country"],
 };
-const PROFILE_DEFAULTS = { "p-status": "F1-OPT", "p-sponsor-filter": "unlikely" };
+const PROFILE_DEFAULTS = { "p-status": "F1-OPT", "p-sponsor-filter": "unlikely", "p-job-country": "US" };
+let _authCountries = new Set();   // countries the user can already work in
 
 async function loadProfileForm() {
   let profile = {};
@@ -471,11 +473,19 @@ async function loadProfileForm() {
     if (el.type === "checkbox") el.checked = !!v;
     else el.value = v ?? PROFILE_DEFAULTS[id] ?? "";
   }
-  syncOptFields();
+  _authCountries = new Set(profile?.immigration?.authorized_countries || []);
+  syncVisaFields();
 }
 
-function syncOptFields() {
-  document.getElementById("opt-fields").hidden = document.getElementById("p-status").value !== "F1-OPT";
+/* US asks for a visa status (+ OPT clock); everywhere else it's one yes/no */
+function syncVisaFields() {
+  const code = document.getElementById("p-job-country").value || "US";
+  const isUS = code === "US";
+  document.getElementById("us-visa-block").hidden = !isUS;
+  document.getElementById("auth-block").hidden    = isUS;
+  document.getElementById("opt-fields").hidden    = !isUS || document.getElementById("p-status").value !== "F1-OPT";
+  set("auth-country", regionName(code));
+  document.getElementById("p-authorized").checked = _authCountries.has(code);
 }
 
 async function saveProfileForm() {
@@ -486,6 +496,7 @@ async function saveProfileForm() {
     if (id === "p-days-used") v = v === "" ? 0 : Math.max(0, parseInt(v, 10) || 0);
     (body[sec] ||= {})[key] = v;
   }
+  body.immigration.authorized_countries = [..._authCountries];
   // Starting the clock today if the user entered days but no date
   if (!body.immigration.unemployment_as_of) {
     body.immigration.unemployment_as_of = new Date().toISOString().slice(0, 10);
@@ -652,7 +663,10 @@ function showView(name) {
   document.getElementById(`view-${name}`).classList.add("active");
   if (name === "tracker") loadTracker();
   if (name === "resumes") loadResumes();
-  if (name === "sponsors") setTimeout(() => document.getElementById("sp-company").focus(), 0);
+  if (name === "sponsors") {
+    document.getElementById("sp-country").value = _jobCountry;
+    setTimeout(() => document.getElementById("sp-company").focus(), 0);
+  }
 }
 
 /* ── Resumes ────────────────────────────────────────────────── */
@@ -868,7 +882,7 @@ async function loadTracker() {
         <td>${x(a.company)}</td>
         <td>${x(a.role)}</td>
         <td>${x(a.source||"")}</td>
-        <td>${sponsorBadge(a.sponsorship)}${a.sponsorship?.median_wage ? `<span class="money">${money(a.sponsorship.median_wage)}</span>` : ""}</td>
+        <td>${sponsorBadge(a.sponsorship)}${a.sponsorship?.country ? `<span class="money">${x(a.sponsorship.country)}</span>` : ""}${a.sponsorship?.pay ? `<span class="money">${x(a.sponsorship.pay)}</span>` : ""}</td>
         <td><span class="badge ${bc(a.status)}">${x(a.status)}</span></td>
       </tr>`).join("");
     wrap.innerHTML = `<table>
@@ -883,89 +897,96 @@ async function loadTracker() {
 /* ── Sponsorship ────────────────────────────────────────────── */
 const VERDICT_LABEL = {
   likely: "Sponsors", possible: "May sponsor", unlikely: "Won't sponsor",
-  unknown: "No H-1B record", not_needed: "Not needed",
+  unknown: "No record", not_needed: "Not needed",
 };
+let REGIONS = [];
+const regionName = code => REGIONS.find(r => r.code === code)?.name || code;
 
 function sponsorBadge(sp) {
   if (!sp?.verdict || sp.verdict === "not_needed") return "";
-  const n = sp.h1b?.filings ?? sp.filings;
-  const title = n ? `${n.toLocaleString()} certified H-1B filings` : VERDICT_LABEL[sp.verdict];
-  return `<span class="sp-badge v-${x(sp.verdict)}" title="${x(title)}">${x(sp.label || VERDICT_LABEL[sp.verdict])}</span>`;
+  const tip = sp.evidence?.summary || sp.summary || sp.reasons?.[0] || VERDICT_LABEL[sp.verdict];
+  return `<span class="sp-badge v-${x(sp.verdict)}" title="${x(tip)}">${x(sp.label || VERDICT_LABEL[sp.verdict])}</span>`;
 }
 
-const money = n => n ? `$${Math.round(n / 1000)}k` : "–";
-
 function renderSponsorCard(sp, { compact = false, company = "" } = {}) {
-  const v   = sp.verdict || "unknown";
-  const h   = sp.h1b || null;
-  const tm  = h?.title_match || null;
-  const stat = (val, lbl) => `<div class="sp-stat"><b>${val}</b><span>${x(lbl)}</span></div>`;
-
-  const stats = h ? [
-    stat(h.filings.toLocaleString(), "H-1B filings"),
-    tm ? stat(tm.filings.toLocaleString(), "for this role") : "",
-    stat(money(tm?.median_wage || h.median_wage), tm ? "median pay, role" : "median pay"),
-    tm?.median_pw ? stat(money(tm.median_pw), "prevailing wage") : "",
-  ].join("") : "";
-
+  const v  = sp.verdict || "unknown";
+  const ev = sp.evidence || null;
+  const stats = (ev?.stats || []).map(s =>
+    `<div class="sp-stat"><b>${x(s.value)}</b><span>${x(s.label)}</span></div>`).join("");
   const reasons = (sp.reasons || []).map(r => `<li>${x(r)}</li>`).join("");
+  const where = sp.country?.name ? `<span class="sp-country">${x(sp.country.name)}</span>` : "";
   const head = `
     <div class="sp-head">
       <span class="sp-badge v-${x(v)}">${x(sp.label || VERDICT_LABEL[v])}</span>
       ${company ? `<span class="sp-company">${x(company)}</span>` : ""}
-      ${h?.employer_names?.length ? `<span class="sp-names">${x(h.employer_names.join(" · "))}</span>` : ""}
+      ${ev?.names?.length ? `<span class="sp-names">${x(ev.names.join(" · "))}</span>` : ""}
+      ${where}
     </div>`;
 
   if (compact) {
     return `<div class="sp-card v-${x(v)}">${head}${stats ? `<div class="sp-stats">${stats}</div>` : ""}<ul class="sp-reasons">${reasons}</ul></div>`;
   }
 
-  const years = Object.entries(h?.by_year || {});
-  const peak  = Math.max(1, ...years.map(([, c]) => c));
-  const bars  = years.map(([fy, c]) => `
-    <div class="sp-year" title="FY${x(fy)}: ${c.toLocaleString()} filings">
-      <i style="height:${Math.max(3, Math.round(c / peak * 100))}%"></i><small>FY${x(String(fy).slice(2))}</small>
-    </div>`).join("");
-  const titles = (h?.top_titles || []).map(([t, c]) =>
-    `<tr><td>${x(t)}</td><td>${c.toLocaleString()}</td></tr>`).join("");
+  const bars  = ev?.chart?.bars || [];
+  const peak  = Math.max(1, ...bars.map(([, c]) => c));
+  const chart = bars.length ? `<div>
+      <div class="sp-section-lbl">${x(ev.chart.title)}</div>
+      <div class="sp-years">${bars.map(([lbl, c]) => `
+        <div class="sp-year" title="${x(lbl)}: ${c.toLocaleString()}">
+          <i style="height:${Math.max(3, Math.round(c / peak * 100))}%"></i><small>${x(lbl)}</small>
+        </div>`).join("")}</div></div>` : "";
+  const rows  = ev?.table?.rows || [];
+  const table = rows.length ? `<div>
+      <div class="sp-section-lbl">${x(ev.table.title)}</div>
+      <table class="sp-titles">${rows.map(([a, b]) =>
+        `<tr><td>${x(a)}</td><td>${typeof b === "number" ? b.toLocaleString() : x(b)}</td></tr>`).join("")}</table></div>` : "";
 
   return `
     <div class="sp-card v-${x(v)}">
       ${head}
       ${stats ? `<div class="sp-stats">${stats}</div>` : ""}
-      ${h ? `<div class="sp-cols">
-        <div><div class="sp-section-lbl">Filings by fiscal year</div><div class="sp-years">${bars}</div></div>
-        <div><div class="sp-section-lbl">Most-filed roles</div><table class="sp-titles">${titles}</table></div>
-      </div>` : ""}
+      ${chart || table ? `<div class="sp-cols${chart && table ? "" : " one"}">${chart}${table}</div>` : ""}
       <ul class="sp-reasons">${reasons}</ul>
+      ${sp.source ? `<div class="sp-source">Source: ${x(sp.source)}</div>` : ""}
     </div>`;
 }
 
-function sponsorDbEmptyState() {
+/* Setup steps for a country whose public data exists but isn't imported yet */
+function regionSetupState(r) {
+  const setup = r.data_setup || {};
   return `<div class="empty-state">
-    <b>H-1B data isn't loaded yet.</b> Sponsor Check reads the Department of Labor's public LCA disclosure files.
+    <b>${x(r.data_source)} isn't loaded yet.</b>
     <ol>
-      <li>Download the latest <b>LCA Programs</b> .xlsx files from
-        <code>dol.gov/agencies/eta/foreign-labor/performance</code> (the last 2–3 fiscal years)</li>
-      <li>Run <code>python scripts/build_sponsor_db.py path/to/LCA_Disclosure_Data_FY2025_Q4.xlsx …</code></li>
+      <li>Download ${x(setup.file_hint || "the data files")} from <code>${x((setup.url || "").replace(/^https?:\/\//, ""))}</code></li>
+      <li>Run <code>python scripts/build_sponsor_db.py --country ${x(r.code)} path/to/file …</code></li>
       <li>Refresh this page</li>
     </ol>
-    Until then, verdicts use only the job description's own sponsorship language.
+    Until then, verdicts for ${x(r.name)} use only the job post's own wording.
   </div>`;
+}
+
+async function loadRegions() {
+  try { REGIONS = await fetch("/api/regions").then(r => r.json()); } catch { REGIONS = []; }
+  const opts = REGIONS.map(r =>
+    `<option value="${x(r.code)}">${x(r.name)}${r.data_source ? (r.available ? " ✓" : " (data not loaded)") : ""}</option>`).join("");
+  document.getElementById("p-job-country").innerHTML = opts;
+  document.getElementById("sp-country").innerHTML    = opts;
 }
 
 async function checkSponsor(e) {
   e?.preventDefault();
   const company = document.getElementById("sp-company").value.trim();
   const title   = document.getElementById("sp-title").value.trim();
+  const country = document.getElementById("sp-country").value;
   const out     = document.getElementById("sponsor-result");
   if (!company) return;
   out.innerHTML = `<div class="empty-state">Checking ${x(company)}…</div>`;
   try {
-    const sp = await fetch(`/api/sponsor?company=${encodeURIComponent(company)}&title=${encodeURIComponent(title)}`)
-      .then(r => r.json());
+    const q  = new URLSearchParams({ company, title, country });
+    const sp = await fetch(`/api/sponsor?${q}`).then(r => r.json());
     if (sp.error) { out.innerHTML = `<div class="empty-state">${x(sp.error)}</div>`; return; }
-    out.innerHTML = sp.db?.available ? renderSponsorCard(sp, { company }) : sponsorDbEmptyState();
+    const r = sp.region || {};
+    out.innerHTML = (r.has_data && !r.available) ? regionSetupState(r) : renderSponsorCard(sp, { company });
   } catch {
     out.innerHTML = `<div class="empty-state">Could not reach the server.</div>`;
   }
@@ -989,18 +1010,23 @@ async function loadVisa() {
   }
 
   const note = document.getElementById("sponsor-db-note");
-  const db = v.sponsor_db || {};
-  if (db.available) {
-    const fy = db.fy_min && db.fy_max ? (db.fy_min === db.fy_max ? ` · FY${db.fy_min}` : ` · FY${db.fy_min}–${db.fy_max}`) : "";
+  const r = v.job_country || {};
+  _jobCountry = r.code || "US";
+  if (!v.needs_sponsorship) {
     note.className = "sb-note";
-    note.innerHTML = `H-1B data: <b>${db.rows.toLocaleString()}</b> filings${fy}`;
-  } else if (v.needs_sponsorship) {
+    note.innerHTML = `Job search: <b>${x(r.name)}</b> · no sponsorship needed`;
+  } else if (r.available) {
+    note.className = "sb-note";
+    note.innerHTML = `Job search: <b>${x(r.name)}</b><br>${x(r.data_source)}${r.detail ? ` · ${x(r.detail)}` : ""}`;
+  } else if (r.has_data) {
     note.className = "sb-note warn";
-    note.innerHTML = `H-1B data not loaded. Open <b>Sponsor Check</b> for setup.`;
+    note.innerHTML = `Job search: <b>${x(r.name)}</b><br>Sponsor data not loaded. See <b>Sponsor Check</b>.`;
   } else {
-    note.innerHTML = "";
+    note.className = "sb-note";
+    note.innerHTML = `Job search: <b>${x(r.name)}</b><br>Verdicts from job-post wording`;
   }
 }
+let _jobCountry = "US";
 
 /* ── Helpers ────────────────────────────────────────────────── */
 const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -1042,7 +1068,12 @@ document.getElementById("btn-back-resumes") .addEventListener("click", () => sho
 document.getElementById("btn-sponsors")     .addEventListener("click", () => showView("sponsors"));
 document.getElementById("btn-back-sponsors").addEventListener("click", () => showView("feed"));
 document.getElementById("sponsor-form")     .addEventListener("submit", checkSponsor);
-document.getElementById("p-status")         .addEventListener("change", syncOptFields);
+document.getElementById("p-status")         .addEventListener("change", syncVisaFields);
+document.getElementById("p-job-country")    .addEventListener("change", syncVisaFields);
+document.getElementById("p-authorized")     .addEventListener("change", e => {
+  const code = document.getElementById("p-job-country").value;
+  e.target.checked ? _authCountries.add(code) : _authCountries.delete(code);
+});
 document.getElementById("btn-settings").addEventListener("click", showSettings);
 document.getElementById("settings-close").addEventListener("click", hideSettings);
 document.getElementById("settings-save") .addEventListener("click", saveSettings);
@@ -1135,7 +1166,7 @@ connect();
 initChips();
 initModes();
 initResumeUpload();
-loadVisa();
+loadRegions().then(loadVisa);
 
 // Show settings on first run if no creds saved
 if (!ls("jc_email")) {

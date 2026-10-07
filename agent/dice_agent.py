@@ -556,7 +556,7 @@ class DiceAgent:
                             continue
 
                         # Sponsorship: H-1B history + JD language
-                        spons, spons_skip = sponsor_gate(company, title, jd, self.profile)
+                        spons, spons_skip = sponsor_gate(company, title, jd, self.profile, location="United States")
                         job_ref["sponsorship"] = spons
                         if spons_skip:
                             self._log(f"Sponsorship — {spons_skip} — skipping", "skip", job_ref)

@@ -242,9 +242,10 @@ PROFILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 # Profile sections + fields the Settings panel is allowed to write
 PROFILE_FIELDS = {
     "personal":    {"name", "email", "phone", "linkedin", "github", "city", "state", "zip", "country"},
-    "immigration": {"status", "stem_opt", "currently_employed", "unemployment_days_used", "unemployment_as_of"},
+    "immigration": {"status", "stem_opt", "currently_employed", "unemployment_days_used", "unemployment_as_of",
+                    "authorized_countries"},
     "education":   {"degree", "field", "school", "graduation_year"},
-    "preferences": {"salary_min", "salary_text", "job_type", "sponsor_filter"},
+    "preferences": {"salary_min", "salary_text", "job_type", "sponsor_filter", "job_country"},
 }
 
 
@@ -269,6 +270,7 @@ async def save_profile(body: dict):
     try:
         from user_profile import IMMIGRATION_ANSWERS
         from sponsorship import SKIP_VERDICTS
+        from regions import is_supported
         profile = _load_profile()
         for section, fields in PROFILE_FIELDS.items():
             incoming = body.get(section)
@@ -281,9 +283,18 @@ async def save_profile(body: dict):
         imm = profile.get("immigration", {})
         if imm.get("status") and imm["status"] not in IMMIGRATION_ANSWERS:
             return JSONResponse({"ok": False, "error": f"Unknown status {imm['status']}"}, status_code=400)
+        auth = imm.get("authorized_countries")
+        if auth is not None:
+            if not isinstance(auth, list) or not all(isinstance(c, str) and is_supported(c) for c in auth):
+                return JSONResponse({"ok": False, "error": "Unknown country in authorized_countries"}, status_code=400)
+            imm["authorized_countries"] = sorted({c.upper() for c in auth})
         pref = profile.get("preferences", {})
         if pref.get("sponsor_filter") and pref["sponsor_filter"] not in SKIP_VERDICTS:
             return JSONResponse({"ok": False, "error": "Unknown sponsor_filter"}, status_code=400)
+        if pref.get("job_country"):
+            if not is_supported(pref["job_country"]):
+                return JSONResponse({"ok": False, "error": "Unknown job_country"}, status_code=400)
+            pref["job_country"] = pref["job_country"].upper()
         with open(PROFILE_PATH, "w", encoding="utf-8") as f:
             json.dump(profile, f, indent=2)
         return {"ok": True}
@@ -291,28 +302,41 @@ async def save_profile(body: dict):
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
+@app.get("/api/regions")
+async def regions_list():
+    """Supported countries and whether their sponsor data is loaded."""
+    from regions import list_regions
+    return [r.info() for r in list_regions()]
+
+
 @app.get("/api/visa")
 async def get_visa():
-    """OPT unemployment clock + whether the user needs sponsorship."""
+    """Job-search country, its data status, sponsorship need and the OPT clock."""
     from visa import opt_clock
-    from sponsorship import needs_sponsorship, get_db
+    from regions import get_region
+    from sponsorship import job_country, needs_sponsorship
     profile = _load_profile()
+    region  = get_region(job_country(profile))
     return {
         "status":            profile.get("immigration", {}).get("status", ""),
-        "needs_sponsorship": needs_sponsorship(profile) if profile else True,
-        "opt":               opt_clock(profile),
-        "sponsor_db":        get_db().status(),
+        "job_country":       region.info(),
+        "needs_sponsorship": needs_sponsorship(profile, region.code),
+        "opt":               opt_clock(profile) if region.code == "US" else {"applicable": False},
     }
 
 
 @app.get("/api/sponsor")
-async def sponsor_lookup(company: str, title: str = "", jd: str = ""):
-    """Look up a company's H-1B history (and a role, if given)."""
-    from sponsorship import assess, get_db
+async def sponsor_lookup(company: str, title: str = "", jd: str = "", country: str = ""):
+    """Check one employer in a country (default: the profile's job-search country)."""
+    from regions import get_region, is_supported
+    from sponsorship import assess, job_country
     if not company.strip():
         return JSONResponse({"error": "company is required"}, status_code=400)
+    if country and not is_supported(country):
+        return JSONResponse({"error": f"Unknown country {country}"}, status_code=400)
     profile = _load_profile()
-    return {**assess(company, title, jd, profile), "db": get_db().status()}
+    region  = get_region(job_country(profile, country=country or None))
+    return {**assess(company, title, jd, profile, region=region), "region": region.info()}
 
 
 @app.websocket("/ws")

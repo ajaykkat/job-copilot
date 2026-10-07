@@ -1,13 +1,14 @@
 from datetime import datetime
 
+import pytest
 from openpyxl import Workbook
 
 from conftest import HEADER
 
 
-def test_xlsx_import_with_fiscal_year_from_decision_date(tmp_path):
+def test_us_xlsx_import_with_fiscal_year_from_decision_date(tmp_path):
     from build_sponsor_db import build
-    from sponsorship import SponsorDB
+    from regions.us import UnitedStates
 
     wb = Workbook()
     ws = wb.active
@@ -21,11 +22,20 @@ def test_xlsx_import_with_fiscal_year_from_decision_date(tmp_path):
     src = tmp_path / "lca_export.xlsx"   # no FYxxxx in the name
     wb.save(src)
 
-    out = tmp_path / "s.db"
-    assert build([str(src)], str(out)) == 2  # row with blank employer dropped
+    out = tmp_path / "us.db"
+    assert build("US", [str(src)], str(out)) == 2  # row with blank employer dropped
 
-    h = SponsorDB(str(out)).lookup("initrode")
-    assert h["filings"] == 2
-    assert h["by_year"] == {2023: 1, 2024: 1}
-    assert h["median_wage"] == 127_400       # median(130000, 60*2080)
-    assert h["top_states"] == ["CA"]
+    region = UnitedStates(str(out))
+    ev = region.lookup("initrode")
+    assert ev["summary"] == "2 H-1B filings"
+    assert ev["chart"]["bars"] == [["FY23", 1], ["FY24", 1]]
+    assert ev["pay"] == "$127k"                    # median(130000, 60*2080)
+    assert region.status()["detail"] == "FY2023–2024"
+
+
+def test_build_rejects_countries_without_data(tmp_path):
+    from build_sponsor_db import build
+    with pytest.raises(SystemExit):
+        build("DE", [], str(tmp_path / "x.db"))
+    with pytest.raises(SystemExit):
+        build("ZZ", [], str(tmp_path / "x.db"))
